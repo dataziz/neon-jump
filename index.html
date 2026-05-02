@@ -2,46 +2,61 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>NEON JUMP AI</title>
-    <!-- AI Libraries -->
+    <title>NEON NOD ARENA</title>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
-    
     <style>
         body { background: #050505; color: #00f2ff; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
         .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        h1 { font-size: 3rem; text-shadow: 0 0 20px #00f2ff; }
-        input { padding: 12px; margin: 10px; width: 250px; border-radius: 8px; border: 1px solid #00f2ff; background: #111; color: white; }
-        button { padding: 12px 30px; background: #00f2ff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        #game-screen { display: none; }
-        canvas { border: 3px solid #00f2ff; border-radius: 20px; box-shadow: 0 0 30px #00f2ff; }
-        #count-val { font-size: 5rem; position: absolute; top: 20px; right: 40px; color: #fff; text-shadow: 0 0 10px #00f2ff; }
+        #game-screen { display: none; position: relative; }
+        canvas { border: 3px solid #00f2ff; border-radius: 20px; box-shadow: 0 0 30px #00f2ff; width: 80%; max-width: 640px; }
+        .stats { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around; font-size: 2.5rem; font-weight: bold; text-shadow: 0 0 10px #00f2ff; }
+        #timer { color: #ff3131; }
+        button { padding: 15px 40px; font-size: 1.2rem; background: #00f2ff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="auth-screen" class="container">
-        <h1>NEON JUMP</h1>
-        <input type="email" placeholder="Email">
-        <input type="password" placeholder="Password">
-        <!-- We use onclick directly here to be 100% sure it triggers -->
-        <button onclick="enterArena()">ENTER ARENA</button>
+        <h1>NEON NOD</h1>
+        <p>20 Seconds. How many nods?</p>
+        <button onclick="enterArena()">START CHALLENGE</button>
     </div>
 
     <div id="game-screen" class="container">
-        <div id="count-val">0</div>
+        <div class="stats">
+            <div>NODS: <span id="count-val">0</span></div>
+            <div>TIME: <span id="timer">20</span>s</div>
+        </div>
         <video id="webcam" style="display:none;"></video>
-        <canvas id="canvas-output" width="640" height="480"></canvas>
+        <canvas id="canvas-output"></canvas>
     </div>
 
     <script>
-        // THIS IS THE BRAIN OF THE APP
+        let nodCount = 0;
+        let timeLeft = 20;
+        let isDown = false;
+        let gameActive = false;
+
         function enterArena() {
-            console.log("Button Clicked!");
             document.getElementById('auth-screen').style.display = 'none';
             document.getElementById('game-screen').style.display = 'flex';
             startAI();
+        }
+
+        function startTimer() {
+            gameActive = true;
+            const timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timer').innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    gameActive = false;
+                    alert("TIME UP! Your Score: " + nodCount);
+                    location.reload(); // Restart the game
+                }
+            }, 1000);
         }
 
         function startAI() {
@@ -50,17 +65,14 @@
             const canvasCtx = canvasElement.getContext('2d');
             const countDisplay = document.getElementById('count-val');
 
-            let jumpCount = 0;
-            let isUp = false;
-
             const pose = new Pose({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
             });
 
-            pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+            pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5 });
 
             pose.onResults((results) => {
-                if (!results.poseLandmarks) return;
+                if (!results.poseLandmarks || !gameActive) return;
 
                 canvasCtx.save();
                 canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -68,24 +80,30 @@
                 canvasCtx.scale(-1, 1);
                 canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
 
-                // Draw Neon Lines
-                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00f2ff', lineWidth: 4});
-                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#fff', lineWidth: 2, radius: 3});
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00f2ff', lineWidth: 2});
 
-                // Jump Detection (Hip Tracking)
-                const hipY = results.poseLandmarks[23].y;
-                if (hipY < 0.45 && !isUp) { isUp = true; } 
-                if (hipY > 0.60 && isUp) { 
-                    jumpCount++; 
-                    isUp = false; 
-                    countDisplay.innerText = jumpCount; 
+                // INSTANT NOD LOGIC
+                const noseY = results.poseLandmarks[0].y;
+
+                // Adjusted for fast detection: 0.52 is just below middle, 0.48 is just above
+                if (noseY > 0.52 && !isDown) { 
+                    isDown = true; 
+                } 
+                if (noseY < 0.48 && isDown) { 
+                    nodCount++; 
+                    isDown = false; 
+                    countDisplay.innerText = nodCount; 
                 }
+                
                 canvasCtx.restore();
             });
 
             const camera = new Camera(videoElement, {
-                onFrame: async () => { await pose.send({image: videoElement}); },
-                width: 640, height: 480
+                onFrame: async () => { 
+                    await pose.send({image: videoElement}); 
+                    if(!gameActive && timeLeft === 20) startTimer(); // Starts timer on first frame
+                },
+                width: 480, height: 360
             });
             camera.start();
         }
