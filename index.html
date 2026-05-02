@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NEON JUMP AI</title>
+    <!-- AI Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    
+    <style>
+        body { background: #050505; color: #00f2ff; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
+        .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+        h1 { font-size: 3rem; text-shadow: 0 0 20px #00f2ff; }
+        input { padding: 12px; margin: 10px; width: 250px; border-radius: 8px; border: 1px solid #00f2ff; background: #111; color: white; }
+        button { padding: 12px 30px; background: #00f2ff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        #game-screen { display: none; }
+        canvas { border: 3px solid #00f2ff; border-radius: 20px; box-shadow: 0 0 30px #00f2ff; }
+        #count-val { font-size: 5rem; position: absolute; top: 20px; right: 40px; color: #fff; text-shadow: 0 0 10px #00f2ff; }
+    </style>
+</head>
+<body>
+
+    <div id="auth-screen" class="container">
+        <h1>NEON JUMP</h1>
+        <input type="email" placeholder="Email">
+        <input type="password" placeholder="Password">
+        <!-- We use onclick directly here to be 100% sure it triggers -->
+        <button onclick="enterArena()">ENTER ARENA</button>
+    </div>
+
+    <div id="game-screen" class="container">
+        <div id="count-val">0</div>
+        <video id="webcam" style="display:none;"></video>
+        <canvas id="canvas-output" width="640" height="480"></canvas>
+    </div>
+
+    <script>
+        // THIS IS THE BRAIN OF THE APP
+        function enterArena() {
+            console.log("Button Clicked!");
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            startAI();
+        }
+
+        function startAI() {
+            const videoElement = document.getElementById('webcam');
+            const canvasElement = document.getElementById('canvas-output');
+            const canvasCtx = canvasElement.getContext('2d');
+            const countDisplay = document.getElementById('count-val');
+
+            let jumpCount = 0;
+            let isUp = false;
+
+            const pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+
+            pose.onResults((results) => {
+                if (!results.poseLandmarks) return;
+
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                canvasCtx.translate(canvasElement.width, 0);
+                canvasCtx.scale(-1, 1);
+                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+                // Draw Neon Lines
+                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00f2ff', lineWidth: 4});
+                drawLandmarks(canvasCtx, results.poseLandmarks, {color: '#fff', lineWidth: 2, radius: 3});
+
+                // Jump Detection (Hip Tracking)
+                const hipY = results.poseLandmarks[23].y;
+                if (hipY < 0.45 && !isUp) { isUp = true; } 
+                if (hipY > 0.60 && isUp) { 
+                    jumpCount++; 
+                    isUp = false; 
+                    countDisplay.innerText = jumpCount; 
+                }
+                canvasCtx.restore();
+            });
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => { await pose.send({image: videoElement}); },
+                width: 640, height: 480
+            });
+            camera.start();
+        }
+    </script>
+</body>
+</html>
