@@ -1,112 +1,61 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>NEON NOD ARENA</title>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
-    <style>
-        body { background: #050505; color: #00f2ff; font-family: sans-serif; text-align: center; margin: 0; overflow: hidden; }
-        .container { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
-        #game-screen { display: none; position: relative; }
-        canvas { border: 3px solid #00f2ff; border-radius: 20px; box-shadow: 0 0 30px #00f2ff; width: 80%; max-width: 640px; }
-        .stats { position: absolute; top: 20px; width: 100%; display: flex; justify-content: space-around; font-size: 2.5rem; font-weight: bold; text-shadow: 0 0 10px #00f2ff; }
-        #timer { color: #ff3131; }
-        button { padding: 15px 40px; font-size: 1.2rem; background: #00f2ff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-    </style>
-</head>
-<body>
+<!-- Inside your index.html -->
 
     <div id="auth-screen" class="container">
-        <h1>NEON NOD</h1>
-        <p>20 Seconds. How many nods?</p>
-        <button onclick="enterArena()">START CHALLENGE</button>
-    </div>
-
-    <div id="game-screen" class="container">
-        <div class="stats">
-            <div>NODS: <span id="count-val">0</span></div>
-            <div>TIME: <span id="timer">20</span>s</div>
+        <!-- New Welcome Area -->
+        <div class="welcome-header">
+            <img src="image_0.png" alt="Nod Master" class="nod-master-img">
+            <h1>NEON NOD ARENA</h1>
+            <p>Welcome to the 20-Second Challenge!</p>
         </div>
-        <video id="webcam" style="display:none;"></video>
-        <canvas id="canvas-output"></canvas>
+
+        <!-- Nickname Input (No passwords) -->
+        <div class="login-box">
+            <input type="text" placeholder="Enter Your Gamer Tag">
+            <button onclick="showTutorial()">HOW TO PLAY</button>
+            <button onclick="enterArena()">START GAME</button>
+        </div>
     </div>
 
-    <script>
-        let nodCount = 0;
-        let timeLeft = 20;
-        let isDown = false;
-        let gameActive = false;
+    <!-- The Tutorial Modal/Screen -->
+    <div id="tutorial-screen" class="container" style="display:none;">
+        <div class="tutorial-content">
+            <h2>Tutorial: Mastering the Nod</h2>
+            <div class="tutorial-steps">
+                <p>1️⃣ Set Up: Make sure your camera can see your face.</p>
+                <p>2️⃣ Get Ready: The game starts as soon as the camera connects.</p>
+                <p>3️⃣ Nod Down: Tilt your head down toward your chest.</p>
+                <p>4️⃣ Nod Up: Lift your head back up quickly to score!</p>
+            </div>
+            <button onclick="enterArena()">I'M READY!</button>
+        </div>
+    </div>
 
-        function enterArena() {
-            document.getElementById('auth-screen').style.display = 'none';
-            document.getElementById('game-screen').style.display = 'flex';
-            startAI();
+    <!-- (Your existing game-screen div remains the same) -->
+
+<script>
+    // New function to show the tutorial
+    function showTutorial() {
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('tutorial-screen').style.display = 'flex';
+    }
+
+    // Updated enterArena function to include tutorial handling
+    function enterArena() {
+        // Find whichever screen is currently showing and hide it
+        const authScreen = document.getElementById('auth-screen');
+        const tutorialScreen = document.getElementById('tutorial-screen');
+        
+        if (authScreen.style.display !== 'none') {
+            authScreen.style.display = 'none';
+        }
+        
+        if (tutorialScreen.style.display !== 'none') {
+            tutorialScreen.style.display = 'none';
         }
 
-        function startTimer() {
-            gameActive = true;
-            const timerInterval = setInterval(() => {
-                timeLeft--;
-                document.getElementById('timer').innerText = timeLeft;
-                if (timeLeft <= 0) {
-                    clearInterval(timerInterval);
-                    gameActive = false;
-                    alert("TIME UP! Your Score: " + nodCount);
-                    location.reload(); // Restart the game
-                }
-            }, 1000);
-        }
+        document.getElementById('game-screen').style.display = 'flex';
+        startAI();
+    }
 
-        function startAI() {
-            const videoElement = document.getElementById('webcam');
-            const canvasElement = document.getElementById('canvas-output');
-            const canvasCtx = canvasElement.getContext('2d');
-            const countDisplay = document.getElementById('count-val');
-
-            const pose = new Pose({
-                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-            });
-
-            pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5 });
-
-            pose.onResults((results) => {
-                if (!results.poseLandmarks || !gameActive) return;
-
-                canvasCtx.save();
-                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-                canvasCtx.translate(canvasElement.width, 0);
-                canvasCtx.scale(-1, 1);
-                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
-
-                drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00f2ff', lineWidth: 2});
-
-                // INSTANT NOD LOGIC
-                const noseY = results.poseLandmarks[0].y;
-
-                // Adjusted for fast detection: 0.52 is just below middle, 0.48 is just above
-                if (noseY > 0.52 && !isDown) { 
-                    isDown = true; 
-                } 
-                if (noseY < 0.48 && isDown) { 
-                    nodCount++; 
-                    isDown = false; 
-                    countDisplay.innerText = nodCount; 
-                }
-                
-                canvasCtx.restore();
-            });
-
-            const camera = new Camera(videoElement, {
-                onFrame: async () => { 
-                    await pose.send({image: videoElement}); 
-                    if(!gameActive && timeLeft === 20) startTimer(); // Starts timer on first frame
-                },
-                width: 480, height: 360
-            });
-            camera.start();
-        }
-    </script>
-</body>
-</html>
+    // (The rest of your startAI and game logic functions remain the same)
+</script>
