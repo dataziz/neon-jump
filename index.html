@@ -1,61 +1,154 @@
-<!-- Inside your index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON NOD ARENA</title>
+    <!-- MediaPipe AI Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils"></script>
+    
+    <style>
+        :root { --neon: #00f2ff; --dark: #0a0a0a; --red: #ff3131; }
+        body { background-color: var(--dark); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        
+        /* Decoration & UI */
+        .card { background: rgba(20, 20, 20, 0.9); border: 2px solid var(--neon); border-radius: 20px; padding: 40px; text-align: center; box-shadow: 0 0 30px rgba(0, 242, 255, 0.2); max-width: 400px; width: 90%; }
+        .mascot { width: 120px; height: 120px; border-radius: 50%; border: 3px solid var(--neon); margin-bottom: 20px; box-shadow: 0 0 15px var(--neon); }
+        h1 { color: var(--neon); text-shadow: 0 0 10px var(--neon); margin: 0 0 10px 0; font-size: 2rem; }
+        input { background: #1a1a1a; border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; width: 100%; margin-bottom: 15px; outline: none; box-sizing: border-box; }
+        input:focus { border-color: var(--neon); }
+        button { background: var(--neon); color: black; border: none; padding: 12px 25px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; font-size: 1rem; transition: 0.3s; }
+        button:hover { background: white; box-shadow: 0 0 20px var(--neon); }
+        
+        /* Game Screen */
+        #game-screen { display: none; flex-direction: column; width: 100vw; height: 100vh; align-items: center; justify-content: center; }
+        .stats { position: absolute; top: 20px; display: flex; gap: 40px; font-size: 2rem; font-weight: bold; text-shadow: 0 0 10px var(--neon); }
+        #timer { color: var(--red); }
+        canvas { border: 4px solid var(--neon); border-radius: 15px; max-width: 90%; max-height: 70%; box-shadow: 0 0 40px rgba(0, 242, 255, 0.4); }
+        
+        /* Tutorial Overlay */
+        #tutorial { position: fixed; background: rgba(0,0,0,0.9); width: 100%; height: 100%; display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 100; padding: 20px; text-align: center; }
+    </style>
+</head>
+<body>
 
-    <div id="auth-screen" class="container">
-        <!-- New Welcome Area -->
-        <div class="welcome-header">
-            <img src="image_0.png" alt="Nod Master" class="nod-master-img">
-            <h1>NEON NOD ARENA</h1>
-            <p>Welcome to the 20-Second Challenge!</p>
-        </div>
-
-        <!-- Nickname Input (No passwords) -->
-        <div class="login-box">
-            <input type="text" placeholder="Enter Your Gamer Tag">
-            <button onclick="showTutorial()">HOW TO PLAY</button>
-            <button onclick="enterArena()">START GAME</button>
-        </div>
+    <!-- Main Login Screen -->
+    <div id="auth-screen" class="card">
+        <img src="china beria.jpg" class="mascot" alt="Arena Master">
+        <h1>NEON NOD</h1>
+        <p style="color: #888;">Log in to Enter the Arena</p>
+        <input type="text" id="user-email" placeholder="Gmail">
+        <input type="password" id="user-pass" placeholder="Password">
+        <button onclick="startTutorial()">ENTER ARENA</button>
     </div>
 
-    <!-- The Tutorial Modal/Screen -->
-    <div id="tutorial-screen" class="container" style="display:none;">
-        <div class="tutorial-content">
-            <h2>Tutorial: Mastering the Nod</h2>
-            <div class="tutorial-steps">
-                <p>1️⃣ Set Up: Make sure your camera can see your face.</p>
-                <p>2️⃣ Get Ready: The game starts as soon as the camera connects.</p>
-                <p>3️⃣ Nod Down: Tilt your head down toward your chest.</p>
-                <p>4️⃣ Nod Up: Lift your head back up quickly to score!</p>
-            </div>
-            <button onclick="enterArena()">I'M READY!</button>
+    <!-- Tutorial Screen -->
+    <div id="tutorial">
+        <h1 style="font-size: 3rem;">TUTORIAL</h1>
+        <div style="font-size: 1.2rem; line-height: 1.8; margin-bottom: 30px;">
+            <p>1. Stand 1 meter away from the camera.</p>
+            <p>2. Wait for the <b>Cyan Skeleton</b> to appear.</p>
+            <p>3. Quickly <b>NOD DOWN</b> and <b>UP</b> to score.</p>
+            <p>4. You have 20 seconds. GO FAST!</p>
         </div>
+        <button style="width: 200px;" onclick="launchGame()">I'M READY</button>
     </div>
 
-    <!-- (Your existing game-screen div remains the same) -->
+    <!-- Game Screen -->
+    <div id="game-screen">
+        <div class="stats">
+            <div>SCORE: <span id="count-val">0</span></div>
+            <div>TIME: <span id="timer">20</span>s</div>
+        </div>
+        <video id="webcam" style="display:none;" playsinline></video>
+        <canvas id="canvas-output"></canvas>
+    </div>
 
-<script>
-    // New function to show the tutorial
-    function showTutorial() {
-        document.getElementById('auth-screen').style.display = 'none';
-        document.getElementById('tutorial-screen').style.display = 'flex';
-    }
+    <script>
+        let nodCount = 0;
+        let timeLeft = 20;
+        let isDown = false;
+        let gameActive = false;
 
-    // Updated enterArena function to include tutorial handling
-    function enterArena() {
-        // Find whichever screen is currently showing and hide it
-        const authScreen = document.getElementById('auth-screen');
-        const tutorialScreen = document.getElementById('tutorial-screen');
-        
-        if (authScreen.style.display !== 'none') {
-            authScreen.style.display = 'none';
+        function startTutorial() {
+            const email = document.getElementById('user-email').value;
+            const pass = document.getElementById('user-pass').value;
+            
+            // Console log "saves" it to your browser's developer tools (F12)
+            console.log("Login captured:", email, pass);
+            
+            document.getElementById('auth-screen').style.display = 'none';
+            document.getElementById('tutorial').style.display = 'flex';
         }
-        
-        if (tutorialScreen.style.display !== 'none') {
-            tutorialScreen.style.display = 'none';
+
+        function launchGame() {
+            document.getElementById('tutorial').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            startAI();
         }
 
-        document.getElementById('game-screen').style.display = 'flex';
-        startAI();
-    }
+        function startAI() {
+            const videoElement = document.getElementById('webcam');
+            const canvasElement = document.getElementById('canvas-output');
+            const canvasCtx = canvasElement.getContext('2d');
+            const countDisplay = document.getElementById('count-val');
 
-    // (The rest of your startAI and game logic functions remain the same)
-</script>
+            const pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.setOptions({ modelComplexity: 0, smoothLandmarks: true, minDetectionConfidence: 0.5 });
+
+            pose.onResults((results) => {
+                if (!results.poseLandmarks) return;
+
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                canvasCtx.translate(canvasElement.width, 0);
+                canvasCtx.scale(-1, 1);
+                canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+                if (results.poseLandmarks && gameActive) {
+                    drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#00f2ff', lineWidth: 2});
+                    
+                    const noseY = results.poseLandmarks[0].y;
+                    if (noseY > 0.52 && !isDown) isDown = true;
+                    if (noseY < 0.48 && isDown) {
+                        nodCount++;
+                        isDown = false;
+                        countDisplay.innerText = nodCount;
+                    }
+                }
+                canvasCtx.restore();
+            });
+
+            const camera = new Camera(videoElement, {
+                onFrame: async () => { 
+                    await pose.send({image: videoElement}); 
+                    if(!gameActive && timeLeft === 20) {
+                        gameActive = true;
+                        startTimer();
+                    }
+                },
+                width: 640, height: 480
+            });
+            camera.start();
+        }
+
+        function startTimer() {
+            const timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timer').innerText = timeLeft;
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    gameActive = false;
+                    alert("ARENA CLOSED! Final Score: " + nodCount);
+                    location.reload();
+                }
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
